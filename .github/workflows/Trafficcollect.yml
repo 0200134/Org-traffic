@@ -36,7 +36,6 @@ jobs:
           TOTAL_UNIQ_CLONES=0
 
           REPORT=""
-
           REPORT+="| Repository | Views | Unique | Clones | Unique |\n"
           REPORT+="|-----------|-------|--------|--------|--------|\n"
 
@@ -48,7 +47,6 @@ jobs:
             for REPO in $REPOS; do
               VIEWS_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/views")
-
               CLONES_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/clones")
 
@@ -86,14 +84,22 @@ jobs:
           START="<!-- TRAFFIC-START -->"
           END="<!-- TRAFFIC-END -->"
 
-          SUMMARY="**Total Views:** $V1  
-**Unique Views:** \$V2  
-**Total Clones:** \$C1  
-**Unique Clones:** \$C2  
+          SUMMARY=$(cat << 'EOF'
+**Total Views:** REPLACE_V1  
+**Unique Views:** REPLACE_V2  
+**Total Clones:** REPLACE_C1  
+**Unique Clones:** REPLACE_C2  
 
-### Repository Details  
-$REPORT
-"
+### Repository Details
+REPLACE_REPORT
+EOF
+)
+
+          SUMMARY="${SUMMARY/REPLACE_V1/$V1}"
+          SUMMARY="${SUMMARY/REPLACE_V2/$V2}"
+          SUMMARY="${SUMMARY/REPLACE_C1/$C1}"
+          SUMMARY="${SUMMARY/REPLACE_C2/$C2}"
+          SUMMARY="${SUMMARY/REPLACE_REPORT/$REPORT}"
 
           sed -i "/$START/,/$END/{ /$START/{p; echo \"$SUMMARY\"; }; /$END/p; d; }" README.md
 
