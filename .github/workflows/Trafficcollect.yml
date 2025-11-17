@@ -7,11 +7,11 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   collect:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,15 +29,26 @@ jobs:
 
           echo "[]" > traffic/traffic-summary.json
 
+          TOTAL_VIEWS=0
+          TOTAL_VIEWS_UNIQ=0
+          TOTAL_CLONES=0
+          TOTAL_CLONES_UNIQ=0
+
+          echo ""
+          echo "=============================="
+          echo "🔥 TRAFFIC SUMMARY (ALL ORGS)"
+          echo "=============================="
+          echo ""
+
           for ORG in "${ORGS[@]}"; do
-            echo "--- ORG: $ORG ---"
+            echo ""
+            echo "=== ORG: $ORG ==="
 
             REPOS=$(curl -s -H "Authorization: token $GH_TOKEN" \
-              "https://api.github.com/orgs/$ORG/repos?per_page=200" \
-              | jq -r '.[].name')
+                "https://api.github.com/orgs/$ORG/repos?per_page=200" \
+                | jq -r '.[].name')
 
             for REPO in $REPOS; do
-              echo "→ $ORG/$REPO"
 
               VIEWS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/views")
@@ -45,6 +56,22 @@ jobs:
               CLONES=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/clones")
 
+              VIEWS_TOTAL=$(echo "$VIEWS" | jq '.count')
+              VIEWS_UNIQ=$(echo "$VIEWS" | jq '.uniques')
+              CLONES_TOTAL=$(echo "$CLONES" | jq '.count')
+              CLONES_UNIQ=$(echo "$CLONES" | jq '.uniques')
+
+              # 콘솔 숫자 출력
+              printf "→ %-35s | views: %4s (%2s uniq) | clones: %4s (%2s uniq)\n" \
+                "$REPO" "$VIEWS_TOTAL" "$VIEWS_UNIQ" "$CLONES_TOTAL" "$CLONES_UNIQ"
+
+              # 전체 합산
+              TOTAL_VIEWS=$((TOTAL_VIEWS + VIEWS_TOTAL))
+              TOTAL_VIEWS_UNIQ=$((TOTAL_VIEWS_UNIQ + VIEWS_UNIQ))
+              TOTAL_CLONES=$((TOTAL_CLONES + CLONES_TOTAL))
+              TOTAL_CLONES_UNIQ=$((TOTAL_CLONES_UNIQ + CLONES_UNIQ))
+
+              # JSON 저장
               jq --arg org "$ORG" \
                  --arg repo "$REPO" \
                  --argjson views "$VIEWS" \
@@ -56,12 +83,24 @@ jobs:
                     clones:$clones,
                     timestamp: now
                   }]' traffic/traffic-summary.json \
-                > traffic/tmp.json
+              > traffic/tmp.json
 
               mv traffic/tmp.json traffic/traffic-summary.json
             done
           done
 
+          echo ""
+          echo "=============================="
+          echo "🔥 TOTAL TRAFFIC (ALL ORGS)"
+          echo "=============================="
+          echo "Total Views:          $TOTAL_VIEWS"
+          echo "Total Unique Views:   $TOTAL_VIEWS_UNIQ"
+          echo "Total Clones:         $TOTAL_CLONES"
+          echo "Total Unique Clones:  $TOTAL_CLONES_UNIQ"
+          echo "=============================="
+          echo ""
+
+          # Convert to CSV
           jq -r '
             ["org","repo","total_views","unique_views","total_clones","unique_clones"],
             (.[] | [
@@ -72,7 +111,8 @@ jobs:
               .clones.count,
               .clones.uniques
             ])
-            | @csv' traffic/traffic-summary.json > traffic/traffic-summary.csv
+            | @csv' traffic/traffic-summary.json \
+          > traffic/traffic-summary.csv
 
       - name: Upload JSON
         uses: actions/upload-artifact@v4
