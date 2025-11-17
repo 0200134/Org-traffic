@@ -15,13 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # README 업데이트 위해 필요
+          fetch-depth: 0
 
       - name: Install jq
         run: sudo apt-get install -y jq
 
       - name: Prepare output
-        run: mkdir traffic
+        run: mkdir -p traffic
 
       - name: Collect Traffic
         id: collect
@@ -41,8 +41,7 @@ jobs:
 
           for ORG in "${ORGS[@]}"; do
             REPOS=$(curl -s -H "Authorization: token $GH_TOKEN" \
-                  "https://api.github.com/orgs/$ORG/repos?per_page=200" \
-                  | jq -r '.[].name')
+              "https://api.github.com/orgs/$ORG/repos?per_page=200" | jq -r '.[].name')
 
             for REPO in $REPOS; do
               VIEWS_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
@@ -90,7 +89,7 @@ jobs:
 **Total Clones:** REPLACE_C1  
 **Unique Clones:** REPLACE_C2  
 
-### Repository Details
+### Repository Details  
 REPLACE_REPORT
 EOF
 )
@@ -103,10 +102,10 @@ EOF
 
           sed -i "/$START/,/$END/{ /$START/{p; echo \"$SUMMARY\"; }; /$END/p; d; }" README.md
 
-      - name: Commit and push
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add README.md
-          git commit -m "Auto update traffic stats" || echo "No changes"
+          git commit -m "Auto update traffic stats" || true
           git push
