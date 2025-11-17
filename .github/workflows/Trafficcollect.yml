@@ -1,4 +1,4 @@
-name: "Org Traffic Collector (auto, null-free)"
+name: "Traffic Collector + Auto README Update"
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   collect:
@@ -14,6 +14,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # README 업데이트 위해 필요
 
       - name: Install jq
         run: sudo apt-get install -y jq
@@ -22,103 +24,83 @@ jobs:
         run: mkdir traffic
 
       - name: Collect Traffic
+        id: collect
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ORGS=("Freeing-the-Lang" "Quad-brain-Foundation" "All-In-One-Foundation")
-
-          echo "[]" > traffic/traffic-summary.json
 
           TOTAL_VIEWS=0
           TOTAL_UNIQ_VIEWS=0
           TOTAL_CLONES=0
           TOTAL_UNIQ_CLONES=0
 
-          echo ""
-          echo "=============================="
-          echo "🔥 TRAFFIC REPORT (AUTO)"
-          echo "=============================="
+          REPORT=""
+
+          REPORT+="| Repository | Views | Unique | Clones | Unique |\n"
+          REPORT+="|-----------|-------|--------|--------|--------|\n"
 
           for ORG in "${ORGS[@]}"; do
-            echo ""
-            echo "=== ORG: $ORG ==="
-
             REPOS=$(curl -s -H "Authorization: token $GH_TOKEN" \
                   "https://api.github.com/orgs/$ORG/repos?per_page=200" \
                   | jq -r '.[].name')
 
             for REPO in $REPOS; do
-
               VIEWS_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/views")
 
               CLONES_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/clones")
 
-              # null → 0 처리
-              VIEWS_TOTAL=$(echo "$VIEWS_JSON" | jq '.count // 0')
+              VIEWS=$(echo "$VIEWS_JSON" | jq '.count // 0')
               VIEWS_UNIQ=$(echo "$VIEWS_JSON" | jq '.uniques // 0')
-              CLONES_TOTAL=$(echo "$CLONES_JSON" | jq '.count // 0')
+              CLONES=$(echo "$CLONES_JSON" | jq '.count // 0')
               CLONES_UNIQ=$(echo "$CLONES_JSON" | jq '.uniques // 0')
 
-              printf "→ %-30s | views: %4s (%2s uniq) | clones: %4s (%2s uniq)\n" \
-                "$REPO" "$VIEWS_TOTAL" "$VIEWS_UNIQ" "$CLONES_TOTAL" "$CLONES_UNIQ"
-
-              TOTAL_VIEWS=$((TOTAL_VIEWS + VIEWS_TOTAL))
+              TOTAL_VIEWS=$((TOTAL_VIEWS + VIEWS))
               TOTAL_UNIQ_VIEWS=$((TOTAL_UNIQ_VIEWS + VIEWS_UNIQ))
-              TOTAL_CLONES=$((TOTAL_CLONES + CLONES_TOTAL))
+              TOTAL_CLONES=$((TOTAL_CLONES + CLONES))
               TOTAL_UNIQ_CLONES=$((TOTAL_UNIQ_CLONES + CLONES_UNIQ))
 
-              jq --arg org "$ORG" \
-                 --arg repo "$REPO" \
-                 --argjson views "$VIEWS_JSON" \
-                 --argjson clones "$CLONES_JSON" \
-                 '. += [{
-                    org:$org,
-                    repo:$repo,
-                    views:($views + {count: ($views.count // 0), uniques: ($views.uniques // 0)}),
-                    clones:($clones + {count: ($clones.count // 0), uniques: ($clones.uniques // 0)}),
-                    timestamp: now
-                  }]' traffic/traffic-summary.json \
-              > traffic/tmp.json
-
-              mv traffic/tmp.json traffic/traffic-summary.json
-
+              REPORT+="| $ORG/$REPO | $VIEWS | $VIEWS_UNIQ | $CLONES | $CLONES_UNIQ |\n"
             done
           done
 
-          echo ""
-          echo "=============================="
-          echo "🔥 TRAFFIC TOTAL (AUTO)"
-          echo "=============================="
-          echo "Total Views:          $TOTAL_VIEWS"
-          echo "Total Unique Views:   $TOTAL_UNIQ_VIEWS"
-          echo "Total Clones:         $TOTAL_CLONES"
-          echo "Total Unique Clones:  $TOTAL_UNIQ_CLONES"
-          echo "=============================="
-          echo ""
+          echo "REPORT<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-          jq -r '
-            ["org","repo","views","views_unique","clones","clones_unique"],
-            (.[] | [
-              .org,
-              .repo,
-              .views.count,
-              .views.uniques,
-              .clones.count,
-              .clones.uniques
-            ]) | @csv' \
-          traffic/traffic-summary.json \
-          > traffic/traffic-summary.csv
+          echo "TOTAL_VIEWS=$TOTAL_VIEWS" >> $GITHUB_OUTPUT
+          echo "TOTAL_UNIQ_VIEWS=$TOTAL_UNIQ_VIEWS" >> $GITHUB_OUTPUT
+          echo "TOTAL_CLONES=$TOTAL_CLONES" >> $GITHUB_OUTPUT
+          echo "TOTAL_UNIQ_CLONES=$TOTAL_UNIQ_CLONES" >> $GITHUB_OUTPUT
 
-      - name: Upload JSON
-        uses: actions/upload-artifact@v4
-        with:
-          name: traffic-json
-          path: traffic/traffic-summary.json
+      - name: Update README
+        env:
+          REPORT: ${{ steps.collect.outputs.REPORT }}
+          V1: ${{ steps.collect.outputs.TOTAL_VIEWS }}
+          V2: ${{ steps.collect.outputs.TOTAL_UNIQ_VIEWS }}
+          C1: ${{ steps.collect.outputs.TOTAL_CLONES }}
+          C2: ${{ steps.collect.outputs.TOTAL_UNIQ_CLONES }}
+        run: |
+          START="<!-- TRAFFIC-START -->"
+          END="<!-- TRAFFIC-END -->"
 
-      - name: Upload CSV
-        uses: actions/upload-artifact@v4
-        with:
-          name: traffic-csv
-          path: traffic/traffic-summary.csv
+          SUMMARY="**Total Views:** $V1  
+**Unique Views:** $V2  
+**Total Clones:** $C1  
+**Unique Clones:** $C2  
+
+### Repository Details  
+$REPORT
+"
+
+          sed -i "/$START/,/$END/{ /$START/{p; echo \"$SUMMARY\"; }; /$END/p; d; }" README.md
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add README.md
+          git commit -m "Auto update traffic stats" || echo "No changes"
+          git push
