@@ -87,9 +87,9 @@ jobs:
           END="<!-- TRAFFIC-END -->"
 
           SUMMARY="**Total Views:** $V1  
-**Unique Views:** $V2  
-**Total Clones:** $C1  
-**Unique Clones:** $C2  
+**Unique Views:** \$V2  
+**Total Clones:** \$C1  
+**Unique Clones:** \$C2  
 
 ### Repository Details  
 $REPORT
