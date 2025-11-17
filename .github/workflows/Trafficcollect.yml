@@ -55,7 +55,7 @@ jobs:
               CLONES_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/clones")
 
-              # null 방지 → 숫자 자동 0 처리
+              # null → 0 처리
               VIEWS_TOTAL=$(echo "$VIEWS_JSON" | jq '.count // 0')
               VIEWS_UNIQ=$(echo "$VIEWS_JSON" | jq '.uniques // 0')
               CLONES_TOTAL=$(echo "$CLONES_JSON" | jq '.count // 0')
@@ -69,7 +69,6 @@ jobs:
               TOTAL_CLONES=$((TOTAL_CLONES + CLONES_TOTAL))
               TOTAL_UNIQ_CLONES=$((TOTAL_UNIQ_CLONES + CLONES_UNIQ))
 
-              # JSON append
               jq --arg org "$ORG" \
                  --arg repo "$REPO" \
                  --argjson views "$VIEWS_JSON" \
@@ -99,7 +98,6 @@ jobs:
           echo "=============================="
           echo ""
 
-          # CSV 생성
           jq -r '
             ["org","repo","views","views_unique","clones","clones_unique"],
             (.[] | [
