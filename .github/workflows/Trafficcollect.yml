@@ -46,6 +46,7 @@ jobs:
             for REPO in $REPOS; do
               VIEWS_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/views")
+
               CLONES_JSON=$(curl -s -H "Authorization: token $GH_TOKEN" \
                 "https://api.github.com/repos/$ORG/$REPO/traffic/clones")
 
@@ -78,8 +79,9 @@ jobs:
           START="<!-- TRAFFIC-START -->"
           END="<!-- TRAFFIC-END -->"
           REPORT_FILE="traffic/report.md"
-
           SUMMARY_FILE="traffic/summary.md"
+
+          # Create the summary block
           cat <<EOF > $SUMMARY_FILE
 **Total Views:** $V1  
 **Unique Views:** $V2  
@@ -91,10 +93,10 @@ EOF
 
           cat "$REPORT_FILE" >> "$SUMMARY_FILE"
 
-          # remove old section
+          # remove previous content between the tags
           sed -i "/$START/,/$END/{ /$START/!{ /$END/!d; }; }" README.md
 
-          # insert new section
+          # insert new block
           awk -v start="$START" -v file="$SUMMARY_FILE" '
             $0 ~ start {
               print;
