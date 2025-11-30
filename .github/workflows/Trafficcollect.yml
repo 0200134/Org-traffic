@@ -35,9 +35,9 @@ jobs:
           TOTAL_CLONES=0
           TOTAL_UNIQ_CLONES=0
 
-          REPORT=""
-          REPORT+="| Repository | Views | Unique | Clones | Unique |\n"
-          REPORT+="|-----------|-------|--------|--------|--------|\n"
+          REPORT_FILE="traffic/report.md"
+          echo "| Repository | Views | Unique | Clones | Unique |" > $REPORT_FILE
+          echo "|-----------|-------|--------|--------|--------|" >> $REPORT_FILE
 
           for ORG in "${ORGS[@]}"; do
             REPOS=$(curl -s -H "Authorization: token $GH_TOKEN" \
@@ -59,48 +59,52 @@ jobs:
               TOTAL_CLONES=$((TOTAL_CLONES + CLONES))
               TOTAL_UNIQ_CLONES=$((TOTAL_UNIQ_CLONES + CLONES_UNIQ))
 
-              REPORT+="| $ORG/$REPO | $VIEWS | $VIEWS_UNIQ | $CLONES | $CLONES_UNIQ |\n"
+              echo "| $ORG/$REPO | $VIEWS | $VIEWS_UNIQ | $CLONES | $CLONES_UNIQ |" >> $REPORT_FILE
             done
           done
 
-          echo "REPORT<<EOF" >> $GITHUB_OUTPUT
-          echo "$REPORT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "TOTAL_VIEWS=$TOTAL_VIEWS" >> $GITHUB_OUTPUT
-          echo "TOTAL_UNIQ_VIEWS=$TOTAL_UNIQ_VIEWS" >> $GITHUB_OUTPUT
-          echo "TOTAL_CLONES=$TOTAL_CLONES" >> $GITHUB_OUTPUT
-          echo "TOTAL_UNIQ_CLONES=$TOTAL_UNIQ_CLONES" >> $GITHUB_OUTPUT
+          echo "total_views=$TOTAL_VIEWS" >> $GITHUB_OUTPUT
+          echo "total_unique_views=$TOTAL_UNIQ_VIEWS" >> $GITHUB_OUTPUT
+          echo "total_clones=$TOTAL_CLONES" >> $GITHUB_OUTPUT
+          echo "total_unique_clones=$TOTAL_UNIQ_CLONES" >> $GITHUB_OUTPUT
 
       - name: Update README
         env:
-          REPORT: ${{ steps.collect.outputs.REPORT }}
-          V1: ${{ steps.collect.outputs.TOTAL_VIEWS }}
-          V2: ${{ steps.collect.outputs.TOTAL_UNIQ_VIEWS }}
-          C1: ${{ steps.collect.outputs.TOTAL_CLONES }}
-          C2: ${{ steps.collect.outputs.TOTAL_UNIQ_CLONES }}
+          V1: ${{ steps.collect.outputs.total_views }}
+          V2: ${{ steps.collect.outputs.total_unique_views }}
+          C1: ${{ steps.collect.outputs.total_clones }}
+          C2: ${{ steps.collect.outputs.total_unique_clones }}
         run: |
           START="<!-- TRAFFIC-START -->"
           END="<!-- TRAFFIC-END -->"
+          REPORT_FILE="traffic/report.md"
 
-          SUMMARY=$(cat << 'EOF'
-**Total Views:** REPLACE_V1  
-**Unique Views:** REPLACE_V2  
-**Total Clones:** REPLACE_C1  
-**Unique Clones:** REPLACE_C2  
+          SUMMARY_FILE="traffic/summary.md"
+          cat <<EOF > $SUMMARY_FILE
+**Total Views:** $V1  
+**Unique Views:** $V2  
+**Total Clones:** $C1  
+**Unique Clones:** $C2  
 
-### Repository Details  
-REPLACE_REPORT
+### Repository Details
 EOF
-)
 
-          SUMMARY="${SUMMARY/REPLACE_V1/$V1}"
-          SUMMARY="${SUMMARY/REPLACE_V2/$V2}"
-          SUMMARY="${SUMMARY/REPLACE_C1/$C1}"
-          SUMMARY="${SUMMARY/REPLACE_C2/$C2}"
-          SUMMARY="${SUMMARY/REPLACE_REPORT/$REPORT}"
+          cat "$REPORT_FILE" >> "$SUMMARY_FILE"
 
-          sed -i "/$START/,/$END/{ /$START/{p; echo \"$SUMMARY\"; }; /$END/p; d; }" README.md
+          # remove old section
+          sed -i "/$START/,/$END/{ /$START/!{ /$END/!d; }; }" README.md
+
+          # insert new section
+          awk -v start="$START" -v file="$SUMMARY_FILE" '
+            $0 ~ start {
+              print;
+              while ((getline line < file) > 0) print line;
+              next
+            }
+            { print }
+          ' README.md > README_tmp.md
+
+          mv README_tmp.md README.md
 
       - name: Commit changes
         run: |
